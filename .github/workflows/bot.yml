@@ -1,0 +1,46 @@
+name: Deploy Bot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20.x]
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+    - name: Install dependencies
+      run: npm install
+    - name: Start application
+      run: |
+        set -e
+        echo "===== Starting bot ====="
+        npm start > bot.log 2>&1 &
+        BOT_PID=$!
+        echo "Bot PID: $BOT_PID"
+        sleep 15
+        echo ""
+        echo "===== Startup logs (first 15s) ====="
+        cat bot.log || true
+        echo ""
+        echo "===== Bot is running in background ====="
+        for i in $(seq 1 330); do
+          sleep 60
+          if ! kill -0 $BOT_PID 2>/dev/null; then
+            echo ""
+            echo "===== Bot process exited ====="
+            cat bot.log || true
+            exit 1
+          fi
+          echo "[heartbeat $(date -u +%H:%M:%S)] still running — last lines:"
+          tail -n 8 bot.log 2>/dev/null || true
+        done
+        echo "Max runtime reached"
+        kill $BOT_PID 2>/dev/null || true
+        cat bot.log || true
